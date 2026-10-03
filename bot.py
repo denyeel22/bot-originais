@@ -143,7 +143,7 @@ async def atualizar_contador(guild):
 async def on_member_join(member):
     await atualizar_contador(member.guild)
         # 🎭 Cargo automático
-    cargo = member.guild.get_role(1499991610166083675)
+    cargo = member.guild.get_role(1555760706895482971)
 
 
     if cargo:
