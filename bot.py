@@ -15,6 +15,9 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 
+NOME_CANAL_ALISTAMENTO = "alistamento"
+MODELO_ALISTAMENTO = "@everyone\n\nNome:\nID:\nPlataforma:\nPrint info:"
+
 @bot.event
 async def on_ready():
     try:
@@ -31,6 +34,19 @@ async def on_ready():
         # Sincroniza o contador ao iniciar (inclusive após reinicializações).
         for guild in bot.guilds:
             await atualizar_contador(guild)
+
+        # Garante que o #alistamento tenha um formulário limpo no início.
+        for guild in bot.guilds:
+            canal_alistamento = discord.utils.get(
+                guild.text_channels, name=NOME_CANAL_ALISTAMENTO
+            )
+            if canal_alistamento is not None:
+                mensagens_recentes = [
+                    mensagem async for mensagem in canal_alistamento.history(limit=20)
+                    if mensagem.author == bot.user
+                ]
+                if not any(m.content.strip() == MODELO_ALISTAMENTO.strip() for m in mensagens_recentes):
+                    await enviar_formulario_alistamento(canal_alistamento)
 
     except Exception as erro:
         print(f"❌ Erro ao sincronizar: {erro}")
@@ -226,62 +242,6 @@ async def on_member_join(member):
 @bot.event
 async def on_member_remove(member):
     await atualizar_contador(member.guild)
-
-# ==========================================
-# 📝 FORMULÁRIO AUTOMÁTICO - ALISTAMENTO
-# ==========================================
-
-NOME_CANAL_ALISTAMENTO = "alistamento"
-MODELO_ALISTAMENTO = """Nome:
-ID:
-Plataforma:
-Print info:"""
-
-
-@bot.event
-async def on_message(message):
-    # Nunca responde às próprias mensagens do bot.
-    if message.author.bot:
-        return
-
-    if isinstance(message.channel, discord.TextChannel) and message.channel.name == NOME_CANAL_ALISTAMENTO:
-        texto = message.content.strip()
-
-        # Se for o modelo vazio, não cria outro modelo.
-        if texto != MODELO_ALISTAMENTO.strip():
-            try:
-                # Primeiro envia a cópia da inscrição preenchida.
-                embed = discord.Embed(
-                    description=message.content or "📎 Anexo enviado.",
-                    color=discord.Color.orange(),
-                    timestamp=discord.utils.utcnow()
-                )
-                embed.set_author(
-                    name=message.author.display_name,
-                    icon_url=message.author.display_avatar.url
-                )
-
-                if message.attachments:
-                    links = "\\n".join(
-                        f"📎 [{a.filename}]({a.url})" for a in message.attachments
-                    )
-                    embed.add_field(name="Anexos", value=links[:1024], inline=False)
-
-                embed.set_footer(text="Alistamento • Os Originais")
-                await message.channel.send(embed=embed)
-
-                # Depois manda NOVAMENTE o modelo vazio para a próxima pessoa.
-                await message.channel.send(MODELO_ALISTAMENTO)
-                print(f"✅ Alistamento recebido de {message.author} e novo formulário enviado.")
-
-            except discord.Forbidden:
-                print("❌ O bot não tem permissão para enviar mensagens no #alistamento.")
-            except discord.HTTPException as erro:
-                print(f"❌ Erro no formulário de alistamento: {erro}")
-
-    # Mantém slash commands e demais comandos funcionando.
-    await bot.process_commands(message)
-
 
 # ==========================================
 # 🛡️ SISTEMA DE MODERAÇÃO - OS ORIGINAIS
@@ -628,28 +588,13 @@ async def preparar_canal_logs():
 
         if canal is None:
             try:
-                canais = await guild.fetch_channels()
-                canal = discord.utils.find(
-                    lambda c: isinstance(c, discord.TextChannel)
-                    and c.name == NOME_CANAL_LOGS,
-                    canais
-                )
-            except discord.Forbidden:
-                print(f"❌ O bot não consegue visualizar os canais de {guild.name}.")
-                continue
-            except discord.HTTPException as erro:
-                print(f"❌ Erro ao buscar os canais de {guild.name}: {erro}")
-                continue
-
-        if canal is None:
-            try:
                 canal = await guild.create_text_channel(
                     NOME_CANAL_LOGS,
                     reason="Criação automática do canal de logs do bot"
                 )
                 print(f"✅ Canal #{NOME_CANAL_LOGS} criado no servidor {guild.name}.")
             except discord.Forbidden:
-                print(f"❌ Dê ao bot a permissão 'Gerenciar Canais' em {guild.name}.")
+                print(f"❌ Não tenho permissão para criar o canal #{NOME_CANAL_LOGS} em {guild.name}.")
                 continue
             except discord.HTTPException as erro:
                 print(f"❌ Erro ao criar o canal #{NOME_CANAL_LOGS}: {erro}")
@@ -659,7 +604,7 @@ async def preparar_canal_logs():
         print(f"✅ Canal de logs configurado: #{canal.name} ({canal.id})")
         return canal
 
-    print("❌ Não foi possível encontrar o canal #logs em nenhum servidor.")
+    print("❌ Não foi possível encontrar/criar o canal de logs.")
     return None
 
 
@@ -797,10 +742,7 @@ async def enviar_log_moderacao(
     motivo=None,
     detalhes=None
 ):
-    canal = pegar_canal_logs()
-
-    if canal is None:
-        canal = await preparar_canal_logs()
+    canal = bot.get_channel(CANAL_LOGS)
 
     if canal is None:
         print("❌ Canal de logs não encontrado.")
@@ -1077,5 +1019,43 @@ async def say(
                 "❌ Ocorreu um erro ao enviar a mensagem.",
                 ephemeral=True
             )
+
+
+
+# ==========================================
+# 📋 SISTEMA DE ALISTAMENTO - OS ORIGINAIS
+# ==========================================
+
+async def enviar_formulario_alistamento(canal):
+    try:
+        await canal.send(
+            MODELO_ALISTAMENTO,
+            allowed_mentions=discord.AllowedMentions(everyone=True)
+        )
+        print(f"✅ Formulário de alistamento enviado em #{canal.name}.")
+    except discord.Forbidden:
+        print("❌ Sem permissão para enviar o formulário ou mencionar @everyone no #alistamento.")
+    except discord.HTTPException as erro:
+        print(f"❌ Erro ao enviar formulário de alistamento: {erro}")
+
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    if isinstance(message.channel, discord.TextChannel) and message.channel.name == NOME_CANAL_ALISTAMENTO:
+        texto = message.content.strip()
+
+        # Se a mensagem já for o formulário limpo do bot, não cria outro.
+        if texto != MODELO_ALISTAMENTO.strip():
+            await enviar_formulario_alistamento(message.channel)
+
+    await bot.process_commands(message)
+
+
+@bot.event
+async def on_ready_alistamento():
+    pass
 
 bot.run(TOKEN)
