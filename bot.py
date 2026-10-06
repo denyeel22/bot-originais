@@ -572,13 +572,28 @@ async def preparar_canal_logs():
 
         if canal is None:
             try:
+                canais = await guild.fetch_channels()
+                canal = discord.utils.find(
+                    lambda c: isinstance(c, discord.TextChannel)
+                    and c.name == NOME_CANAL_LOGS,
+                    canais
+                )
+            except discord.Forbidden:
+                print(f"❌ O bot não consegue visualizar os canais de {guild.name}.")
+                continue
+            except discord.HTTPException as erro:
+                print(f"❌ Erro ao buscar os canais de {guild.name}: {erro}")
+                continue
+
+        if canal is None:
+            try:
                 canal = await guild.create_text_channel(
                     NOME_CANAL_LOGS,
                     reason="Criação automática do canal de logs do bot"
                 )
                 print(f"✅ Canal #{NOME_CANAL_LOGS} criado no servidor {guild.name}.")
             except discord.Forbidden:
-                print(f"❌ Não tenho permissão para criar o canal #{NOME_CANAL_LOGS} em {guild.name}.")
+                print(f"❌ Dê ao bot a permissão 'Gerenciar Canais' em {guild.name}.")
                 continue
             except discord.HTTPException as erro:
                 print(f"❌ Erro ao criar o canal #{NOME_CANAL_LOGS}: {erro}")
@@ -588,7 +603,7 @@ async def preparar_canal_logs():
         print(f"✅ Canal de logs configurado: #{canal.name} ({canal.id})")
         return canal
 
-    print("❌ Não foi possível encontrar/criar o canal de logs.")
+    print("❌ Não foi possível encontrar o canal #logs em nenhum servidor.")
     return None
 
 
@@ -726,7 +741,10 @@ async def enviar_log_moderacao(
     motivo=None,
     detalhes=None
 ):
-    canal = bot.get_channel(CANAL_LOGS)
+    canal = pegar_canal_logs()
+
+    if canal is None:
+        canal = await preparar_canal_logs()
 
     if canal is None:
         print("❌ Canal de logs não encontrado.")
