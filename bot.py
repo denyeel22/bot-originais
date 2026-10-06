@@ -227,14 +227,11 @@ async def on_member_join(member):
 async def on_member_remove(member):
     await atualizar_contador(member.guild)
 
-
 # ==========================================
-# 📋 FORMULÁRIO AUTOMÁTICO - ALISTAMENTO
+# 📝 FORMULÁRIO AUTOMÁTICO - ALISTAMENTO
 # ==========================================
 
-NOME_CANAL_COPIA = "alistamento"
-
-# Modelo vazio que fica disponível para a próxima pessoa copiar.
+NOME_CANAL_ALISTAMENTO = "alistamento"
 MODELO_ALISTAMENTO = """Nome:
 ID:
 Plataforma:
@@ -243,50 +240,46 @@ Print info:"""
 
 @bot.event
 async def on_message(message):
+    # Nunca responde às próprias mensagens do bot.
     if message.author.bot:
         return
 
-    if isinstance(message.channel, discord.TextChannel) and message.channel.name == NOME_CANAL_COPIA:
-        try:
-            # Se alguém enviar o modelo vazio, não duplica.
-            if message.content.strip() == MODELO_ALISTAMENTO.strip():
-                await bot.process_commands(message)
-                return
+    if isinstance(message.channel, discord.TextChannel) and message.channel.name == NOME_CANAL_ALISTAMENTO:
+        texto = message.content.strip()
 
-            # Envia a inscrição preenchida como cópia.
-            embed = discord.Embed(
-                description=message.content or "📎 Anexo enviado.",
-                color=discord.Color.orange(),
-                timestamp=discord.utils.utcnow()
-            )
-
-            embed.set_author(
-                name=message.author.display_name,
-                icon_url=message.author.display_avatar.url
-            )
-
-            if message.attachments:
-                anexos = "\n".join(
-                    f"📎 [{anexo.filename}]({anexo.url})"
-                    for anexo in message.attachments
+        # Se for o modelo vazio, não cria outro modelo.
+        if texto != MODELO_ALISTAMENTO.strip():
+            try:
+                # Primeiro envia a cópia da inscrição preenchida.
+                embed = discord.Embed(
+                    description=message.content or "📎 Anexo enviado.",
+                    color=discord.Color.orange(),
+                    timestamp=discord.utils.utcnow()
                 )
-                embed.add_field(
-                    name="Anexos",
-                    value=anexos[:1024],
-                    inline=False
+                embed.set_author(
+                    name=message.author.display_name,
+                    icon_url=message.author.display_avatar.url
                 )
 
-            embed.set_footer(text="Alistamento • Os Originais")
-            await message.channel.send(embed=embed)
+                if message.attachments:
+                    links = "\\n".join(
+                        f"📎 [{a.filename}]({a.url})" for a in message.attachments
+                    )
+                    embed.add_field(name="Anexos", value=links[:1024], inline=False)
 
-            # Recoloca o formulário vazio para a próxima pessoa.
-            await message.channel.send(MODELO_ALISTAMENTO)
+                embed.set_footer(text="Alistamento • Os Originais")
+                await message.channel.send(embed=embed)
 
-        except discord.Forbidden:
-            print("❌ Não tenho permissão para enviar mensagens no #alistamento.")
-        except discord.HTTPException as erro:
-            print(f"❌ Erro no sistema de alistamento: {erro}")
+                # Depois manda NOVAMENTE o modelo vazio para a próxima pessoa.
+                await message.channel.send(MODELO_ALISTAMENTO)
+                print(f"✅ Alistamento recebido de {message.author} e novo formulário enviado.")
 
+            except discord.Forbidden:
+                print("❌ O bot não tem permissão para enviar mensagens no #alistamento.")
+            except discord.HTTPException as erro:
+                print(f"❌ Erro no formulário de alistamento: {erro}")
+
+    # Mantém slash commands e demais comandos funcionando.
     await bot.process_commands(message)
 
 
@@ -635,13 +628,28 @@ async def preparar_canal_logs():
 
         if canal is None:
             try:
+                canais = await guild.fetch_channels()
+                canal = discord.utils.find(
+                    lambda c: isinstance(c, discord.TextChannel)
+                    and c.name == NOME_CANAL_LOGS,
+                    canais
+                )
+            except discord.Forbidden:
+                print(f"❌ O bot não consegue visualizar os canais de {guild.name}.")
+                continue
+            except discord.HTTPException as erro:
+                print(f"❌ Erro ao buscar os canais de {guild.name}: {erro}")
+                continue
+
+        if canal is None:
+            try:
                 canal = await guild.create_text_channel(
                     NOME_CANAL_LOGS,
                     reason="Criação automática do canal de logs do bot"
                 )
                 print(f"✅ Canal #{NOME_CANAL_LOGS} criado no servidor {guild.name}.")
             except discord.Forbidden:
-                print(f"❌ Não tenho permissão para criar o canal #{NOME_CANAL_LOGS} em {guild.name}.")
+                print(f"❌ Dê ao bot a permissão 'Gerenciar Canais' em {guild.name}.")
                 continue
             except discord.HTTPException as erro:
                 print(f"❌ Erro ao criar o canal #{NOME_CANAL_LOGS}: {erro}")
@@ -651,7 +659,7 @@ async def preparar_canal_logs():
         print(f"✅ Canal de logs configurado: #{canal.name} ({canal.id})")
         return canal
 
-    print("❌ Não foi possível encontrar/criar o canal de logs.")
+    print("❌ Não foi possível encontrar o canal #logs em nenhum servidor.")
     return None
 
 
@@ -789,7 +797,10 @@ async def enviar_log_moderacao(
     motivo=None,
     detalhes=None
 ):
-    canal = bot.get_channel(CANAL_LOGS)
+    canal = pegar_canal_logs()
+
+    if canal is None:
+        canal = await preparar_canal_logs()
 
     if canal is None:
         print("❌ Canal de logs não encontrado.")
