@@ -16,7 +16,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 
 NOME_CANAL_ALISTAMENTO = "alistamento"
-MODELO_ALISTAMENTO = "@everyone\n\nNome:\nID:\nPlataforma:\nPrint info:"
+CARGOS_ALISTAMENTO = [1555754432925405194, 1557070129085550672]
+MODELO_ALISTAMENTO = "<@&1555754432925405194> <@&1557070129085550672>\n\nNome:\nID:\nPlataforma:\nPrint info:"
 
 @bot.event
 async def on_ready():
@@ -1030,11 +1031,11 @@ async def enviar_formulario_alistamento(canal):
     try:
         await canal.send(
             MODELO_ALISTAMENTO,
-            allowed_mentions=discord.AllowedMentions(everyone=True)
+            allowed_mentions=discord.AllowedMentions(roles=True)
         )
         print(f"✅ Formulário de alistamento enviado em #{canal.name}.")
     except discord.Forbidden:
-        print("❌ Sem permissão para enviar o formulário ou mencionar @everyone no #alistamento.")
+        print("❌ Sem permissão para enviar o formulário ou mencionar os cargos no #alistamento.")
     except discord.HTTPException as erro:
         print(f"❌ Erro ao enviar formulário de alistamento: {erro}")
 
