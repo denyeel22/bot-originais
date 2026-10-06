@@ -25,6 +25,9 @@ async def on_ready():
         for comando in synced:
             print(f"➡️ /{comando.name}")
 
+        # Prepara automaticamente o canal de logs.
+        await preparar_canal_logs()
+
         # Sincroniza o contador ao iniciar (inclusive após reinicializações).
         for guild in bot.guilds:
             await atualizar_contador(guild)
@@ -555,10 +558,43 @@ async def erro_comando(
 # 📋 LOGS - OS ORIGINAIS
 # ==========================================
 
-CANAL_LOGS = 1553090765612384317
+# O bot procura o canal "logs" automaticamente.
+# Se ele não existir, tenta criar o canal.
+CANAL_LOGS = None
+NOME_CANAL_LOGS = "logs"
+
+
+async def preparar_canal_logs():
+    global CANAL_LOGS
+
+    for guild in bot.guilds:
+        canal = discord.utils.get(guild.text_channels, name=NOME_CANAL_LOGS)
+
+        if canal is None:
+            try:
+                canal = await guild.create_text_channel(
+                    NOME_CANAL_LOGS,
+                    reason="Criação automática do canal de logs do bot"
+                )
+                print(f"✅ Canal #{NOME_CANAL_LOGS} criado no servidor {guild.name}.")
+            except discord.Forbidden:
+                print(f"❌ Não tenho permissão para criar o canal #{NOME_CANAL_LOGS} em {guild.name}.")
+                continue
+            except discord.HTTPException as erro:
+                print(f"❌ Erro ao criar o canal #{NOME_CANAL_LOGS}: {erro}")
+                continue
+
+        CANAL_LOGS = canal.id
+        print(f"✅ Canal de logs configurado: #{canal.name} ({canal.id})")
+        return canal
+
+    print("❌ Não foi possível encontrar/criar o canal de logs.")
+    return None
 
 
 def pegar_canal_logs():
+    if CANAL_LOGS is None:
+        return None
     return bot.get_channel(CANAL_LOGS)
 
 
